@@ -19,12 +19,17 @@ class RefundDecision:
     reason: str | None = None
 
 
+def validate_refunded_amount(amount: Decimal) -> None:
+    if amount < Decimal("0"):
+        raise AmountError("amount cannot be negative")
+
+
 def calculate_remaining_refundable(
     original_amount: Decimal,
     already_refunded: Decimal,
 ) -> Decimal:
     validate_amount(original_amount)
-    validate_amount(already_refunded)
+    validate_refunded_amount(already_refunded)
     return round_money(original_amount - already_refunded)
 
 
@@ -34,10 +39,7 @@ def request_refund(
     already_refunded: Decimal = Decimal("0.00"),
 ) -> RefundDecision:
     validate_amount(original_amount)
-    validate_amount(refund_amount)
-    validate_amount(already_refunded)
-
-    remaining = calculate_remaining_refundable(original_amount, already_refunded)
+    validate_refunded_amount(already_refunded)
 
     if refund_amount == Decimal("0"):
         return RefundDecision(
@@ -46,11 +48,22 @@ def request_refund(
             reason="refund amount must be greater than zero",
         )
 
+    validate_amount(refund_amount)
+
+    remaining = calculate_remaining_refundable(original_amount, already_refunded)
+
     if remaining <= Decimal("0"):
         return RefundDecision(
             status=RefundStatus.REJECTED,
             amount=Decimal("0.00"),
             reason="payment is already fully refunded",
+        )
+
+    if refund_amount > remaining:
+        return RefundDecision(
+            status=RefundStatus.REJECTED,
+            amount=Decimal("0.00"),
+            reason="refund exceeds refundable amount",
         )
 
     return RefundDecision(
@@ -62,6 +75,6 @@ def request_refund(
 
 def assert_refundable(original_amount: Decimal, refund_amount: Decimal) -> None:
     decision = request_refund(original_amount, refund_amount)
-    if decision.status is RefundStatus.REJECTED:
+    if decision.status in {RefundStatus.REJECTED}:
         raise AmountError(decision.reason or "refund rejected")
 

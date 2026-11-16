@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from payments_svc.auth import User
 from payments_svc.amounts import (
     AmountError,
     CurrencyError,
@@ -36,10 +38,24 @@ class RefundRequest(BaseModel):
     already_refunded: str = "0.00"
 
 
+class ManualRefundRequest(BaseModel):
+    original_amount: str
+    refund_amount: str
+    already_refunded: str = "0.00"
+    reason: str | None = None
+
+
+class AdminRefundRequest(BaseModel):
+    payment_id: str
+    account_id: str
+    amount: str
+    reason: str | None = None
+
+
 class RefundResponse(BaseModel):
     status: str
     amount: str
-    reason: str | None
+    reason: Optional[str]
 
 
 @app.get("/health")
@@ -68,14 +84,14 @@ def create_payment(payload: PaymentRequest) -> PaymentResponse:
 def create_refund(payload: RefundRequest) -> RefundResponse:
     try:
         decision = request_refund(
-            original_amount=Decimal(payload.original_amount),
-            refund_amount=Decimal(payload.refund_amount),
-            already_refunded=Decimal(payload.already_refunded),
+            original_amount=parse_amount(payload.original_amount),
+            refund_amount=parse_amount(payload.refund_amount),
+            already_refunded=parse_amount(payload.already_refunded),
         )
     except AmountError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    status_code = 200 if decision.status is RefundStatus.APPROVED else 400
+    status_code = 200 if decision.status == RefundStatus.APPROVED else 400
     if status_code >= 400:
         raise HTTPException(status_code=status_code, detail=decision.reason)
 
@@ -85,3 +101,41 @@ def create_refund(payload: RefundRequest) -> RefundResponse:
         reason=decision.reason,
     )
 
+
+@app.post("/accounts/{account_id}/manual-refunds", response_model=RefundResponse)
+def create_manual_refund(
+    account_id: str,
+    payload: ManualRefundRequest,
+) -> RefundResponse:
+    try:
+        decision = request_refund(
+            original_amount=Decimal(payload.original_amount),
+            refund_amount=Decimal(payload.refund_amount),
+        )
+    except AmountError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return RefundResponse(
+        status=decision.status.value,
+        amount=str(decision.amount),
+        reason=payload.reason or decision.reason,
+    )
+
+
+@app.post("/admin/refunds", response_model=RefundResponse)
+def create_admin_refund(payload: AdminRefundRequest) -> RefundResponse:
+    user = User(id="system", account_id=payload.account_id, role="admin")
+    try:
+        decision = request_refund(
+            original_amount=parse_amount(payload.amount),
+            refund_amount=parse_amount(payload.amount),
+            already_refunded=Decimal("0.00"),
+        )
+    except AmountError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return RefundResponse(
+        status=decision.status.value,
+        amount=str(decision.amount),
+        reason=payload.reason or decision.reason,
+    )

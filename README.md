@@ -2,29 +2,43 @@
 
 API de pagos en Python para el curso sobre testing y code review con IA.
 
-El proyecto esta preparado para avanzar por incrementos. La base inicial debe funcionar, pero conserva comportamientos ambiguos y bugs sembrados para que se pueda evidenciar como la IA genera, evalua y mejora pruebas.
+El proyecto esta preparado para avanzar por incrementos de clase. Para el Modulo C parte de una base limpia de producto: `amounts.py`, `refunds.py`, `auth.py` y `api.py` tienen contratos confirmados y tests unitarios.
+
+Los artefactos especificos del revisor de PR del Modulo B se dejan fuera de esta rama para que las demos de auditoria de codigo existente empiecen sin ruido.
 
 ## Instalacion
 
-```powershell
+```sh
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate
 pip install -e .[dev]
+```
+
+## Tests
+
+```sh
+python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 ## Smoke test
 
-```powershell
+```sh
 python scripts/smoke_test.py
+```
+
+## Mutation testing
+
+```sh
+sh scripts/mutation_domain.sh
 ```
 
 ## API local
 
-```powershell
+```sh
 uvicorn payments_svc.api:app --reload
 ```
 
-Endpoints iniciales:
+Endpoints:
 
 - `GET /health`
 - `POST /payments`
